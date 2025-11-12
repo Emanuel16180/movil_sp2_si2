@@ -2,12 +2,27 @@ import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
+  // --- INICIO DE CAMBIOS SINGLETON ---
+  
+  // 1. Instancia privada estática
+  static final AuthService _instance = AuthService._internal();
+
+  // 2. Factory constructor que devuelve la instancia
+  factory AuthService() {
+    return _instance;
+  }
+
+  // 3. Constructor interno privado
+  AuthService._internal();
+
+  // --- FIN DE CAMBIOS SINGLETON ---
+
   final Dio _dio = Dio(
     BaseOptions(
-      // baseUrl: 'http://192.168.252.42:8000/api',
-      baseUrl: 'https://ecommercebackend-7m3u.onrender.com/api',
-      connectTimeout: Duration(seconds: 15),
-      receiveTimeout: Duration(seconds: 15),
+      // 4. Apunta a tu backend en Render
+      baseUrl: 'https://smartsales365-backend.onrender.com/api/v1',
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
       headers: {
         "Content-Type": "application/json",
       },
@@ -15,47 +30,62 @@ class AuthService {
   );
 
   /// Método para hacer login y obtener el token JWT
-  Future<bool> login(String email, String password) async {
+  Future<Map<String, dynamic>> login(String email, String password) async {
     try {
-      Response response = await _dio.post(
-        "/token/", 
+      final response = await _dio.post(
+        "/users/login/", // Endpoint de tu documentación
         data: {
           "email": email,
           "password": password,
         },
       );
-      // Imprime la respuesta para debug (podés cambiar por log())
-      print("Respuesta login: ${response.data}");
+
       if (response.statusCode == 200 && response.data["access"] != null) {
         String accessToken = response.data["access"];
         String refreshToken = response.data["refresh"];
         await _saveTokens(accessToken, refreshToken);
-        return true;
+
+        // 5. AÑADE EL TOKEN AL HEADER COMPARTIDO INMEDIATAMENTE
+        await addTokenToHeader();
+
+        return {
+          'success': true,
+          'access_token': accessToken,
+        };
       }
-  } catch (e) {
-    // Aquí está el nuevo catch mejorado
-    if (e is DioException && e.response != null) {
-      print(" Error status: ${e.response?.statusCode}");
-      print(" Error data: ${e.response?.data}");
-    } else {
-      print("Error en login: $e");
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        return {
+          'success': false,
+          'message': 'Credenciales incorrectas',
+        };
+      }
+      return {
+        'success': false,
+        'message': 'Error de conexión: ${e.message}',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error inesperado: $e',
+      };
     }
+    return {
+      'success': false,
+      'message': 'Error desconocido en el login.',
+    };
   }
 
-  return false;
-}
-
-  /// Método para registrar usuario (requiere endpoint sin autenticación previa)
+  /// Método para registrar usuario
   Future<bool> register(String email, String password) async {
     try {
       Response response = await _dio.post(
-        "/users/create/", // Verificá que este endpoint sea público
+        "/users/create/", // Asumiendo este endpoint
         data: {
           "email": email,
           "password": password,
         },
       );
-
       return response.statusCode == 201;
     } catch (e) {
       print("Error en registro: $e");
@@ -89,6 +119,7 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove("access_token");
     await prefs.remove("refresh_token");
+    _dio.options.headers.remove("Authorization"); // Limpia el header
   }
 
   /// Método para acceder a Dio desde otros servicios, ya configurado

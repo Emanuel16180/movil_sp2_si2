@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'home_screen.dart';
+import 'app_navigation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,21 +16,36 @@ class _LoginScreenState extends State<LoginScreen> {
   bool rememberMe = false;
   bool obscurePassword = true;
   String? errorMessage;
+  bool _loading = false; // Estado para el indicador de carga
 
   void login() async {
-    bool success = await _authService.login(
+    // 1. Iniciar la carga y limpiar errores
+    setState(() {
+      _loading = true;
+      errorMessage = null;
+    });
+
+    // 2. Llamar al servicio de autenticación
+    final response = await _authService.login(
       emailController.text.trim(),
       passwordController.text.trim(),
     );
 
-    if (success) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-      );
+    // 3. Manejar la respuesta del servicio
+    if (response['success'] == true) {
+      // Login exitoso: Navegar a la pantalla de inicio
+      // No es necesario setState, ya que el widget se reemplazará
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const AppNavigationScreen()),
+        );
+      }
     } else {
+      // Login fallido: Mostrar el mensaje de error
       setState(() {
-        errorMessage = "Error en el login. Verifica tus credenciales.";
+        errorMessage = response['message'] ?? "Error desconocido. Intente de nuevo.";
+        _loading = false; // Detener la carga
       });
     }
   }
@@ -124,7 +139,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               });
                             },
                           ),
-                          const Text("Remember me", style: TextStyle(color: Colors.white)),
+                          const Text("Remember me",
+                              style: TextStyle(color: Colors.white)),
                         ],
                       ),
                       TextButton(
@@ -139,7 +155,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       padding: const EdgeInsets.only(top: 10),
                       child: Text(
                         errorMessage!,
-                        style: const TextStyle(color: Colors.red, fontSize: 14),
+                        style:
+                            const TextStyle(color: Colors.redAccent, fontSize: 14),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   const SizedBox(height: 20),
@@ -147,15 +165,31 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      onPressed: login,
+                      onPressed: _loading ? null : login, // Deshabilita el botón al cargar
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF8B1E3F),
+                        disabledBackgroundColor:
+                            const Color(0xFF8B1E3F).withOpacity(0.7),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text("LOGIN",
-                          style: TextStyle(fontSize: 18, color: Colors.white)),
+                      child: _loading
+                          ? const SizedBox(
+                              width: 25,
+                              height: 25,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 3,
+                              ),
+                            )
+                          : const Text(
+                              "LOGIN",
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.white,
+                              ),
+                            ),
                     ),
                   ),
                 ],
